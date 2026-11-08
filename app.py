@@ -36,7 +36,7 @@ def ask_llm(prompt):
         "messages": [{"role": "user", "content": prompt}]
     })
     return r.json()["message"]["content"]
-    
+
 chunks = []
 for file in Path("docs").glob("*.md"):
     chunks += [p.strip() for p in file.read_text(encoding="utf-8").split("\n\n") if p.strip()]
@@ -48,10 +48,10 @@ dim = chunk_vectors.shape[1] # create FAISS index
 index = faiss.IndexFlatIP(dim) # IndexFlatIP = cosine similary / IndexFlatIP = euclidean dist
 index.add(chunk_vectors)
 
-def retrieve(question, k=5):
-    q = embed([question], is_query=True)
+def retrieve(question, number_of_results=5):
+    q = embed([question], is_query=True) # get query embedding
     q = np.asarray(q, dtype=np.float32).reshape(1, -1)
-    scores, indices = index.search(q, min(k, index.ntotal))
+    scores, indices = index.search(q, min(number_of_results, index.ntotal))
     # scores = chunk_vectors @ q / (np.linalg.norm(chunk_vectors, axis=1) * np.linalg.norm(q))
     # return [chunks[i] for i in np.argsort(scores)[::-1][:k]]
     return [chunks[i] for i in indices[0] if i != -1]

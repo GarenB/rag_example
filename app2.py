@@ -5,7 +5,10 @@ from dotenv import load_dotenv
 from langchain_community.vectorstores import FAISS
 from langchain_ollama import OllamaEmbeddings
 from langchain_core.documents import Document
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+from langchain_classic.chains import create_retrieval_chain
 
 load_dotenv()
 
@@ -32,32 +35,35 @@ vectorstore = FAISS.from_documents(
 
 print(f"Indexes {len(chunks)} chunks\n")
 
-def retrieve(question, number_of_results=5):
-    return vectorstore.similarity_search(question, k=number_of_results)
+retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
 
-def ask_llm(question, context):
-    prompt = f"""Answer the question using ONLY the context below.
-If the answer isn't in the context, say "I don't know".
+system_prompt = (
+    "Use the given context to answer the question. "
+    "If you don't know the answer, say you don't know. "
+    "Use three sentence maximum and keep the answer concise. "
+    "Context: {context}"
+)
 
-Context:
-{context}
+prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", system_prompt),
+        ("human", "{input}")
+    ]
+)
 
-Question: {question}
-"""
-    response = llm.invoke(prompt)
-    return response.content
+question_answer_chain = create_stuff_documents_chain(llm, prompt)
+rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 
 while True:
-    question = input("Ask: ").strip()
-    
-    relevant_docs = retrieve(question)
-    context = "\n\n".join(doc.page_content for doc in relevant_docs)
-    
+    query = input("Ask: ").strip()
+
+    response = rag_chain.invoke({"input": query})
     print("\nRetrieved context:")
-    print(context)
     
-    answer = ask_llm(question, context)
+    for doc in response["context"]:
+        print(f"\nSource: {doc.metadata.get('source', 'Unknown')}")
+        print(doc.page_content)
     
     print("\nAnswer:")
-    print(answer)
+    print(response["answer"])
     print()

@@ -1,6 +1,6 @@
-
+import json
+from sse_starlette.sse import EventSourceResponse
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -55,17 +55,21 @@ def ask_question(request: QuestionRequest):
             status_code=500,
             detail=str(e)
         )
-        
 
 @app.post("/ask/stream")
-def ask_question_stream(request: QuestionRequest):
-    try:
-        return StreamingResponse(
-            rag_pipeline.ask_stream(request.question),
-            media_type="text/plain"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
+async def ask_question_stream(request: QuestionRequest):
+    async def event_generator():
+        try:
+            async for event in rag_pipeline.ask_stream(request.question):
+                yield {
+                    "event": event["event"],
+                    "data": json.dumps(event["data"])
+                }
+        except Exception:
+            yield {
+                "event": "error",
+                "data": json.dumps({
+                    "message": "An error occurred during generation."
+                })
+            }
+    return EventSourceResponse(event_generator())

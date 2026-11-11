@@ -115,17 +115,44 @@ class RAGPipeline:
             "answer": response["answer"],
             "sources": sources
         }
-        
-    
-    def ask_stream(self, question: str):
+
+    async def ask_stream(self, question: str):
         if self.rag_chain is None:
             raise RuntimeError("RAG pipeline is not initialized.")
 
-        for chunk in self.rag_chain.stream({
+        async for chunk in self.rag_chain.astream({
             "input": question
         }):
+
+            # Retrieved documents
+            context = chunk.get("context")
+
+            if context:
+                sources = [
+                    {
+                        "source": doc.metadata.get("source", "Unknown"),
+                        "content": doc.page_content
+                    }
+                    for doc in context
+                ]
+
+                yield {
+                    "event": "sources",
+                    "data": sources
+                }
+
+            # Generated answer
             answer_chunk = chunk.get("answer")
 
             if answer_chunk:
-                yield answer_chunk
+                yield {
+                    "event": "token",
+                    "data": answer_chunk
+                }
+
+        yield {
+            "event": "done",
+            "data": "[DONE]"
+        }
+
 
